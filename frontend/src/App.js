@@ -373,14 +373,30 @@ function App() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsSubmitting(true);
     console.log("Submitting Data:", { userInfo, responses });
-    // Simulate API call
-    setTimeout(() => {
-      setStep('results');
+
+    try {
+      const response = await fetch('https://sjt-backend-a.onrender.com/api/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userInfo, responses }),
+      });
+
+      if (response.ok) {
+        setStep('results');
+      } else {
+        setError(lang === 'en' ? "Submission failed. Please try again." : "جمع کرانے میں ناکامی۔ براہ کرم دوبارہ کوشش کریں۔");
+      }
+    } catch (err) {
+      console.error(err);
+      setError(lang === 'en' ? "Network error. Check connection." : "نیٹ ورک کی خرابی۔ کنکشن چیک کریں۔");
+    } finally {
       setIsSubmitting(false);
-    }, 1000);
+    }
   };
 
   // --- RENDERERS ---
