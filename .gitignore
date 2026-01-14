@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Secrets (IMPORTANT)
+backend/secret.json
+
+# Build output
+frontend/build/
+
+# System files
+.DS_Store
