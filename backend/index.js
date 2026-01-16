@@ -5,20 +5,16 @@ const { google } = require('googleapis');
 // --- LOAD CREDENTIALS (LOCAL vs PRODUCTION) ---
 let CREDENTIALS;
 try {
-  // 1. Try loading from Environment Variable (For Render Deployment)
   if (process.env.GOOGLE_CREDENTIALS) {
     CREDENTIALS = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     console.log("Loaded credentials from Environment Variable.");
-  } 
-  // 2. Fallback to local file (For Local Development)
-  else {
+  } else {
     CREDENTIALS = require('./secret.json');
     console.log("Loaded credentials from secret.json file.");
   }
 } catch (error) {
   console.error("CRITICAL ERROR: Could not load Google Credentials.");
-  console.error("Make sure 'GOOGLE_CREDENTIALS' env var is set on Render, or 'secret.json' exists locally.");
-  process.exit(1); // Stop server if no credentials
+  process.exit(1);
 }
 
 const app = express();
@@ -26,24 +22,25 @@ app.use(cors());
 app.use(express.json());
 
 // --- CONFIGURATION ---
-
-// Your Specific Google Sheet ID
 const SPREADSHEET_ID = '1X54RlcGcFgQdZGCnVXiJadzcA0NJdz48YFecBGn82uc';
 
-// --- ANSWER KEY (1 = Best, 4 = Worst) ---
+// --- ANSWER KEY (Rank 1 = Best, Rank 4 = Worst) ---
+// Logic: Score = 5 - Rank.
+// Example Q1: A is Rank 1. If user picks A, Score = 5-1 = 4.
+// Example Q1: B is Rank 4. If user picks B, Score = 5-4 = 1.
 const ANSWER_KEY = {
-  1:  { A: 1, C: 2, D: 3, B: 4 }, // Order: A, C, D, B
-  2:  { B: 1, A: 2, D: 3, C: 4 }, // Order: B, A, D, C
-  3:  { A: 1, B: 2, C: 3, D: 4 }, // Order: A, B, C, D
-  4:  { B: 1, A: 2, D: 3, C: 4 }, // Order: B, A, D, C
-  5:  { B: 1, A: 2, D: 3, C: 4 }, // Order: B, A, D, C
-  6:  { D: 1, C: 2, B: 3, A: 4 }, // Order: D, C, B, A
-  7:  { C: 1, A: 2, B: 3, D: 4 }, // Order: C, A, B, D
-  8:  { B: 1, A: 2, D: 3, C: 4 }, // Order: B, A, D, C
-  9:  { C: 1, A: 2, B: 3, D: 4 }, // Order: C, A, B, D
-  10: { C: 1, B: 2, A: 3, D: 4 }, // Order: C, B, A, D
-  11: { B: 1, C: 2, D: 3, A: 4 }, // Order: B, C, D, A
-  12: { A: 1, C: 2, B: 3, D: 4 }  // Order: A, C, B, D
+  1:  { A: 1, C: 2, D: 3, B: 4 }, 
+  2:  { B: 1, A: 2, D: 3, C: 4 }, 
+  3:  { A: 1, B: 2, C: 3, D: 4 }, 
+  4:  { B: 1, A: 2, D: 3, C: 4 }, 
+  5:  { B: 1, A: 2, D: 3, C: 4 }, 
+  6:  { D: 1, C: 2, B: 3, A: 4 }, 
+  7:  { C: 1, A: 2, B: 3, D: 4 }, 
+  8:  { B: 1, A: 2, D: 3, C: 4 }, 
+  9:  { C: 1, A: 2, B: 3, D: 4 }, 
+  10: { C: 1, B: 2, A: 3, D: 4 }, 
+  11: { B: 1, C: 2, D: 3, A: 4 }, 
+  12: { A: 1, C: 2, B: 3, D: 4 }  
 };
 
 // --- GOOGLE SHEETS AUTHENTICATION ---
@@ -55,37 +52,18 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 // --- SCORING LOGIC ---
-// Calculates score (1-4) based on distance from ideal ranking
-const calculateQuestionScore = (qId, userResponse) => {
-  const ideal = ANSWER_KEY[qId];
-  if (!ideal || !userResponse) return 0;
+const calculateQuestionScore = (qId, userChoice) => {
+  const ranks = ANSWER_KEY[qId];
+  if (!ranks || !userChoice) return 0;
 
-  let totalDistance = 0;
+  const rank = ranks[userChoice];
+  if (!rank) return 0; // Invalid choice
 
-  // Calculate absolute difference for each option
-  // Example: Ideal A=1, User A=2 -> Diff = 1
-  ['A', 'B', 'C', 'D'].forEach(option => {
-    const userRank = parseInt(userResponse[option] || 0);
-    const idealRank = ideal[option];
-    
-    // If user didn't rank an option, treat it as max distance error
-    if (!userRank) {
-      totalDistance += 4; 
-    } else {
-      totalDistance += Math.abs(userRank - idealRank);
-    }
-  });
-
-  // Mapping Distance to 1-4 Scale:
-  // Dist 0 (Perfect) -> 4 Points
-  // Dist 2           -> 3 Points
-  // Dist 4           -> 2 Points
-  // Dist > 4         -> 1 Point
-  
-  if (totalDistance === 0) return 4;
-  if (totalDistance <= 2) return 3;
-  if (totalDistance <= 4) return 2;
-  return 1;
+  // Rank 1 -> 4 points
+  // Rank 2 -> 3 points
+  // Rank 3 -> 2 points
+  // Rank 4 -> 1 point
+  return 5 - rank;
 };
 
 // --- API ROUTE ---
@@ -95,44 +73,36 @@ app.post('/api/submit', async (req, res) => {
     
     console.log(`Received submission for: ${userInfo.name}`);
 
-    // 1. Calculate Scores
-    let totalScore = 0;
-    const questionScores = {};
-    const formattedResponses = []; // To store "A=1, B=2..." string for sheet
-
-    // Process Q1 to Q12
+    // 1. Calculate Scores for Q1-Q12
+    const questionScores = [];
     for (let i = 1; i <= 12; i++) {
-      const qRes = responses[i];
-      const score = calculateQuestionScore(i, qRes);
-      questionScores[`Q${i}`] = score;
-      totalScore += score;
-
-      // Format response for sheet (e.g., "A:1 B:2 C:3 D:4")
-      const resString = qRes 
-        ? `A:${qRes.A} B:${qRes.B} C:${qRes.C} D:${qRes.D}` 
-        : "N/A";
-      formattedResponses.push(resString);
+      const userChoice = responses[i]; // e.g., 'A'
+      const score = calculateQuestionScore(i, userChoice);
+      questionScores.push(score);
     }
 
-    // 2. Prepare Row Data
+    // 2. Get Text Answers for Q13-Q15
+    const answerQ13 = responses[13] || "";
+    const answerQ14 = responses[14] || "";
+    const answerQ15 = responses[15] || "";
+
+    // 3. Prepare Row Data based on YOUR specific columns:
+    // Name, CNIC, Dealership, City, Score Q1...Score Q12, Q13 Ans, Q14 Ans, Q15 Ans, Score Q13, Score Q14, Score Q15
     const rowData = [
-      new Date().toLocaleString(), // Timestamp
-      userInfo.cnic,
       userInfo.name,
+      userInfo.cnic,
       userInfo.dealership,
       userInfo.city,
-      totalScore, // Total Score (Max 48)
-      // Individual Scores Q1-Q12
-      ...Object.values(questionScores),
-      // Raw Responses Q1-Q12
-      ...formattedResponses,
-      // Written Answers (Just placeholders as they are on paper)
-      "Written on Paper",
-      "Written on Paper",
-      "Written on Paper"
+      ...questionScores, // Spreads Score Q1 to Score Q12
+      answerQ13,
+      answerQ14,
+      answerQ15,
+      "", // Score of Q13 (Empty for manual grading)
+      "", // Score of Q14 (Empty for manual grading)
+      ""  // Score of Q15 (Empty for manual grading)
     ];
 
-    // 3. Append to Google Sheet
+    // 4. Append to Google Sheet
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
       range: 'Sheet1!A1', 
@@ -142,7 +112,7 @@ app.post('/api/submit', async (req, res) => {
       },
     });
 
-    res.status(200).json({ message: 'Success', score: totalScore });
+    res.status(200).json({ message: 'Success' });
 
   } catch (error) {
     console.error('Error saving data:', error);

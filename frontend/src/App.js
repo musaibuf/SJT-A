@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import {
   Container, Box, Typography, TextField, Button, 
-  Paper, LinearProgress, Alert, MenuItem, Grid, Divider,
-  FormControl, InputLabel, Select
+  Paper, LinearProgress, Alert, Grid, Divider,
+  Radio, RadioGroup, FormControlLabel, FormControl
 } from '@mui/material';
 import { createTheme, ThemeProvider, responsiveFontSizes } from '@mui/material/styles';
 
@@ -14,56 +14,28 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LanguageIcon from '@mui/icons-material/Language';
 import EditNoteIcon from '@mui/icons-material/EditNote';
+import WarningIcon from '@mui/icons-material/Warning';
 
 import logo from './logo.png'; 
 
 // --- THEME CONFIGURATION ---
 let theme = createTheme({
   palette: {
-    primary: {
-      main: '#F57C00', // Orange
-      light: 'rgba(245, 124, 0, 0.1)',
-    },
-    secondary: {
-      main: '#B31B1B', // Red
-    },
-    text: {
-      primary: '#2c3e50',
-      secondary: '#34495e',
-    },
-    background: {
-      default: '#f8f9fa',
-      paper: '#FFFFFF',
-    },
+    primary: { main: '#F57C00', light: 'rgba(245, 124, 0, 0.1)' },
+    secondary: { main: '#B31B1B' },
+    text: { primary: '#2c3e50', secondary: '#34495e' },
+    background: { default: '#f8f9fa', paper: '#FFFFFF' },
   },
   typography: {
     fontFamily: 'sans-serif',
-    h1: {
-      fontWeight: 700,
-      color: '#B31B1B',
-      textAlign: 'center',
-      fontSize: '2.2rem',
-    },
-    h2: {
-      fontWeight: 600,
-      color: '#B31B1B',
-      textAlign: 'center',
-      marginBottom: '1rem',
-      fontSize: '1.5rem',
-    },
-    body1: {
-      fontSize: '1rem',
-      lineHeight: 1.6,
-    }
+    h1: { fontWeight: 700, color: '#B31B1B', textAlign: 'center', fontSize: '2.2rem' },
+    h2: { fontWeight: 600, color: '#B31B1B', textAlign: 'center', marginBottom: '1rem', fontSize: '1.5rem' },
+    body1: { fontSize: '1rem', lineHeight: 1.6 }
   },
   components: {
     MuiButton: {
       styleOverrides: {
-        root: {
-          borderRadius: 8,
-          textTransform: 'none',
-          fontWeight: 600,
-        }
+        root: { borderRadius: 8, textTransform: 'none', fontWeight: 600 }
       }
     }
   }
@@ -82,7 +54,7 @@ const containerStyles = {
 
 // --- DATA: QUESTIONS VARIANT A ---
 const questionsA = [
-  // --- MCQs (1-12) ---
+  // ... (Keep your existing Q1-Q12 data exactly as is) ...
   {
     id: 1,
     en: "Q1. A customer wants a trade-in. Your evaluator gives a conservative estimate, and the customer feels insulted and says: “Other dealers offered more.”",
@@ -237,7 +209,7 @@ const questionsA = [
 ];
 
 function App() {
-  const [step, setStep] = useState('welcome'); // welcome, lang, assessment, paper, results
+  const [step, setStep] = useState('welcome'); 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userInfo, setUserInfo] = useState({
     name: '',
@@ -320,49 +292,37 @@ function App() {
     setStep('assessment');
   };
 
-  // --- SCORE HANDLER (ENFORCES UNIQUE SCORES) ---
-  const handleScoreChange = (qId, optionKey, newScore) => {
-    setResponses(prev => {
-      const currentQ = prev[qId] || {};
-      const updatedQ = { ...currentQ, [optionKey]: newScore };
-
-      // Check for duplicates and clear the old one
-      Object.keys(updatedQ).forEach(key => {
-        if (key !== optionKey && updatedQ[key] === newScore) {
-          updatedQ[key] = ''; // Clear the duplicate
-        }
-      });
-
-      return { ...prev, [qId]: updatedQ };
-    });
+  // --- MCQ SELECTION HANDLER ---
+  const handleOptionSelect = (qId, optionKey) => {
+    setResponses(prev => ({ ...prev, [qId]: optionKey }));
+    setError('');
   };
 
-  const validateCurrentQuestion = () => {
-    const q = questionsA[currentQuestionIndex];
-    // For MCQs, ensure all 4 options have a score
-    const currentScores = responses[q.id] || {};
-    const values = ['A', 'B', 'C', 'D'].map(key => currentScores[key]);
-    
-    // Check if all are filled
-    const allFilled = values.every(v => v);
-    
-    // Check if unique (Set removes duplicates)
-    const uniqueValues = new Set(values);
-    
-    return allFilled && uniqueValues.size === 4;
+  // --- TEXT INPUT HANDLER (Q13-15) ---
+  const handleTextChange = (qId, text) => {
+    setResponses(prev => ({ ...prev, [qId]: text }));
+  };
+
+  const countWords = (str) => {
+    if (!str) return 0;
+    return str.trim().split(/\s+/).length;
   };
 
   const handleNext = () => {
-    if (validateCurrentQuestion()) {
-      setError('');
-      // If we are at Q12 (index 11), go to Paper Section
-      if (currentQuestionIndex === 11) {
-        setStep('paper');
-      } else {
-        setCurrentQuestionIndex(prev => prev + 1);
-      }
+    const q = questionsA[currentQuestionIndex];
+    
+    // Validation for MCQs
+    if (!responses[q.id]) {
+      setError(lang === 'en' ? 'Please select an option.' : 'براہ کرم ایک آپشن منتخب کریں۔');
+      return;
+    }
+
+    setError('');
+    // If we are at Q12 (index 11), go to Paper Section
+    if (currentQuestionIndex === 11) {
+      setStep('paper');
     } else {
-      setError(lang === 'en' ? 'Please assign a unique score (1-4) to each option.' : 'براہ کرم ہر آپشن کو ایک منفرد اسکور (1-4) دیں۔');
+      setCurrentQuestionIndex(prev => prev + 1);
     }
   };
 
@@ -374,6 +334,18 @@ function App() {
   };
 
   const handleSubmit = async () => {
+    // Validate Word Counts before submitting
+    const paperQuestions = questionsA.slice(12, 15);
+    for (let q of paperQuestions) {
+      const answer = responses[q.id] || '';
+      if (countWords(answer) > 100) {
+        setError(lang === 'en' 
+          ? `Question ${q.id} exceeds the 100-word limit.` 
+          : `سوال ${q.id} 100 الفاظ کی حد سے زیادہ ہے۔`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     console.log("Submitting Data:", { userInfo, responses });
 
@@ -447,7 +419,7 @@ function App() {
 
   const renderAssessment = () => {
     const q = questionsA[currentQuestionIndex];
-    const progress = ((currentQuestionIndex) / 12) * 100; // Progress based on 12 MCQs
+    const progress = ((currentQuestionIndex) / 12) * 100; 
 
     return (
       <Paper sx={containerStyles} dir={lang === 'ur' ? 'rtl' : 'ltr'}>
@@ -466,37 +438,48 @@ function App() {
           <Box>
             <Alert severity="info" sx={{ mb: 3 }}>
               {lang === 'en' 
-                ? "Rate EACH option from 1 (Most Effective) to 4 (Least Effective)." 
-                : "ہر آپشن کو 1 (سب سے زیادہ مؤثر) سے 4 (سب سے کم مؤثر) تک درجہ دیں۔"}
+                ? "Select the MOST effective option." 
+                : "سب سے زیادہ مؤثر آپشن منتخب کریں۔"}
             </Alert>
             
-            {q.options.map((opt) => (
-              <Paper key={opt.key} elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #eee', borderRadius: 2, backgroundColor: '#fafafa' }}>
-                <Grid container spacing={2} alignItems="center">
-                  <Grid item xs={12} md={8}>
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      <span style={{ color: '#F57C00', fontWeight: 'bold', marginRight: 8, marginLeft: 8 }}>{opt.key}.</span> 
-                      {lang === 'en' ? opt.en : opt.ur}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <FormControl fullWidth size="small" sx={{ backgroundColor: 'white', minWidth: '140px' }}>
-                      <InputLabel>{lang === 'en' ? "Score" : "اسکور"}</InputLabel>
-                      <Select
-                        value={responses[q.id]?.[opt.key] || ''}
-                        label={lang === 'en' ? "Score" : "اسکور"}
-                        onChange={(e) => handleScoreChange(q.id, opt.key, e.target.value)}
-                      >
-                        <MenuItem value={1}>1 - Best</MenuItem>
-                        <MenuItem value={2}>2</MenuItem>
-                        <MenuItem value={3}>3</MenuItem>
-                        <MenuItem value={4}>4 - Worst</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
-              </Paper>
-            ))}
+            <FormControl component="fieldset" sx={{ width: '100%' }}>
+              <RadioGroup
+                value={responses[q.id] || ''}
+                onChange={(e) => handleOptionSelect(q.id, e.target.value)}
+              >
+                {q.options.map((opt) => {
+                  const isSelected = responses[q.id] === opt.key;
+                  return (
+                    <Paper 
+                      key={opt.key} 
+                      elevation={isSelected ? 3 : 0}
+                      sx={{ 
+                        p: 2, 
+                        mb: 2, 
+                        border: isSelected ? '2px solid #F57C00' : '1px solid #eee', 
+                        borderRadius: 2, 
+                        backgroundColor: isSelected ? '#fff3e0' : '#fafafa',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onClick={() => handleOptionSelect(q.id, opt.key)}
+                    >
+                      <FormControlLabel
+                        value={opt.key}
+                        control={<Radio />}
+                        label={
+                          <Typography variant="body1" sx={{ fontWeight: isSelected ? 600 : 400 }}>
+                            <span style={{ color: '#F57C00', fontWeight: 'bold', marginRight: 8, marginLeft: 8 }}>{opt.key}.</span> 
+                            {lang === 'en' ? opt.en : opt.ur}
+                          </Typography>
+                        }
+                        sx={{ width: '100%', margin: 0, alignItems: 'flex-start', '& .MuiRadio-root': { mt: -0.5 } }}
+                      />
+                    </Paper>
+                  );
+                })}
+              </RadioGroup>
+            </FormControl>
           </Box>
         </Box>
 
@@ -525,9 +508,7 @@ function App() {
     );
   };
 
-  // --- NEW: RENDER PAPER SECTION (Q13-15) ---
   const renderPaperSection = () => {
-    // Get Q13, Q14, Q15
     const paperQuestions = questionsA.slice(12, 15);
 
     return (
@@ -539,23 +520,54 @@ function App() {
           </Typography>
           <Typography variant="body1" color="text.secondary">
             {lang === 'en' 
-              ? "Please write the answers to the following questions on your answer sheet." 
-              : "براہ کرم درج ذیل سوالات کے جوابات اپنی جوابی شیٹ پر لکھیں۔"}
+              ? "Please answer the following questions." 
+              : "براہ کرم درج ذیل سوالات کے جوابات دیں۔"}
           </Typography>
         </Box>
 
         <Divider sx={{ mb: 4 }} />
 
-        {paperQuestions.map((q) => (
-          <Box key={q.id} sx={{ mb: 4, p: 2, backgroundColor: '#f9f9f9', borderRadius: 2, border: '1px solid #eee' }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
-              {lang === 'en' ? `Question ${q.id}` : `سوال ${q.id}`}
-            </Typography>
-            <Typography variant="body1" sx={{ fontSize: '1.1rem', lineHeight: 1.6 }}>
-              {lang === 'en' ? q.en : q.ur}
-            </Typography>
-          </Box>
-        ))}
+        {paperQuestions.map((q) => {
+          const currentText = responses[q.id] || '';
+          const wordCount = countWords(currentText);
+          const isOverLimit = wordCount > 100;
+
+          return (
+            <Box key={q.id} sx={{ mb: 5 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
+                {lang === 'en' ? `Question ${q.id}` : `سوال ${q.id}`}
+              </Typography>
+              <Typography variant="body1" sx={{ fontSize: '1.1rem', lineHeight: 1.6, mb: 2 }}>
+                {lang === 'en' ? q.en : q.ur}
+              </Typography>
+              
+              <TextField
+                fullWidth
+                multiline
+                minRows={4}
+                variant="outlined"
+                placeholder={lang === 'en' ? "Type your answer here..." : "اپنا جواب یہاں لکھیں..."}
+                value={currentText}
+                onChange={(e) => handleTextChange(q.id, e.target.value)}
+                error={isOverLimit}
+                helperText={
+                  <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                    <span>
+                      {isOverLimit 
+                        ? (lang === 'en' ? "Word limit exceeded!" : "الفاظ کی حد سے تجاوز!") 
+                        : (lang === 'en' ? "Max 100 words." : "زیادہ سے زیادہ 100 الفاظ۔")}
+                    </span>
+                    <span style={{ color: isOverLimit ? 'red' : 'inherit' }}>
+                      {wordCount} / 100
+                    </span>
+                  </Box>
+                }
+              />
+            </Box>
+          );
+        })}
+
+        {error && <Alert severity="error" sx={{ mb: 3 }} icon={<WarningIcon />}>{error}</Alert>}
 
         <Box sx={{ mt: 4, textAlign: 'center' }}>
           <Button 
